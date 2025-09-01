@@ -191,13 +191,16 @@
     function renderExact(title, lista){
       const wrap = document.createElement('div');
       wrap.className = 'result-card';
-      const items = lista.map(d => `
-        <div class="subtitle">
-          <span class="title">${d.cep}</span>
-          <span class="badge">${d.logradouro || '—'}</span>
-          <div><small>${d.bairro || '—'} • ${d.localidade || ''}/${d.uf || ''}</small></div>
-        </div>
-      `).join('');
+      const items = lista.map(d => {
+    const faixa = d.complemento ? ` (${d.complemento})` : '';
+    return `
+    <div class="subtitle">
+    <span class="title">${d.cep}</span>
+    <span class="badge">${d.logradouro || '—'}${faixa}</span>
+    <div><small>${d.bairro || '—'} • ${d.localidade || ''}/${d.uf || ''}</small></div>
+    </div>
+    `;
+    }).join('');
       wrap.innerHTML = `<div class="title">${title}</div><div class="sep"></div>${items}`;
       saida.appendChild(wrap);
     }

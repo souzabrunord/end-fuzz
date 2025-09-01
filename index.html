@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buscar CEP por Endereço (ViaCEP + Fuzzy)</title>
+</head>
+<body>
+  <h1>Buscar CEP por Endereço (ViaCEP + Fuzzy)</h1>
+  <p><!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buscar CEP por Endereço (ViaCEP + Fuzzy)</title>
+  <style>
+    :root{
+      --bg:#0f172a; /* slate-900 */
+      --panel:#111827; /* gray-900 */
+      --muted:#9ca3af; /* gray-400 */
+      --text:#e5e7eb; /* gray-200 */
+      --accent:#22c55e; /* green-500 */
+      --danger:#ef4444; /* red-500 */
+      --card:#0b1222;
+      --chip:#1f2937; /* gray-800 */
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; padding:24px; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      background: radial-gradient(1000px 600px at 10% 0%, #111827 20%, #0b1222 60%, #0f172a 100%);
+      color:var(--text);
+    }
+    h1{font-size:clamp(1.4rem, 2vw + 1rem, 2rem); margin:0 0 12px}
+    p.lead{margin:0 0 20px; color:var(--muted)}
+    .container{max-width:980px; margin:0 auto}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,0.25)}
+    .grid{display:grid; gap:12px}
+    .grid.cols{grid-template-columns: 110px 1fr 1.2fr auto}
+    label{font-weight:600; font-size:0.9rem}
+    input{width:100%; padding:12px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.04); color:var(--text); outline:none}
+    input::placeholder{color:#94a3b8}
+    .row{display:flex; gap:10px; align-items:end}
+    button{cursor:pointer; border:none; padding:12px 16px; border-radius:12px; font-weight:700; letter-spacing:.2px;}
+    .btn{background:linear-gradient(90deg,#22c55e,#10b981); color:#002b11}
+    .btn:disabled{opacity:.5; cursor:not-allowed}
+    .btn-secondary{background:rgba(255,255,255,0.08); color:var(--text)}
+    .hint{font-size:.85rem; color:var(--muted)}
+    .chips{display:flex; gap:8px; flex-wrap:wrap}
+    .chip{background:var(--chip); padding:6px 10px; border-radius:999px; font-size:.8rem; color:#cbd5e1; border:1px solid rgba(255,255,255,0.08)}
+    .results{margin-top:18px; display:grid; gap:12px}
+    .result-card{background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:14px}
+    .title{font-weight:800}
+    .subtitle{color:#cbd5e1; font-size:.95rem}
+    .badge{display:inline-block; padding:4px 8px; border-radius:999px; font-size:.78rem; background:#0c3b26; color:#a7f3d0; margin-left:6px; border:1px solid #134e4a}
+    .error{color:#fecaca}
+    .loading{display:flex; gap:10px; align-items:center}
+    .spinner{width:16px; height:16px; border:2px solid rgba(255,255,255,0.25); border-top-color:#a7f3d0; border-radius:50%; animation:spin 0.8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .footer{margin-top:18px; color:#9aa4b5; font-size:.85rem}
+    .sep{height:1px; background:rgba(255,255,255,0.08); margin:14px 0}
+    code.k{background:#0b1222; padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,0.08)}
+    small.dim{color:#94a3b8}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Buscar CEP por Endereço <small class="dim">(ViaCEP + fuzzy)</small></h1>
+    <p class="lead">Informe <strong>UF</strong>, <strong>cidade</strong> e <strong>rua</strong>. Se não houver correspondência exata, eu procuro <em>semelhantes</em> e mostro a % de similaridade com <strong>2 casas decimais</strong>.</p>
+
+    <div class="card">
+      <div class="grid cols">
+        <div>
+          <label for="uf">UF</label>
+          <input id="uf" placeholder="SP" maxlength="2" />
+        </div>
+        <div>
+          <label for="cidade">Cidade</label>
+          <input id="cidade" placeholder="Sao Paulo" />
+        </div>
+        <div>
+          <label for="rua">Rua / Logradouro</label>
+          <input id="rua" placeholder="Ex.: Nagasaki" />
+        </div>
+        <div class="row">
+          <button id="buscar" class="btn">Buscar</button>
+          <button id="limpar" class="btn-secondary" title="Limpar">Limpar</button>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="chips">
+        <span class="chip">Aceita cidade sem acento (ex.: Sao Paulo)</span>
+      </div>
+      <div id="status" class="footer"></div>
+    </div>
+
+    <div id="saida" class="results"></div>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const statusEl = $('#status');
+    const saida = $('#saida');
+    const btnBuscar = $('#buscar');
+    const btnLimpar = $('#limpar');
+
+    const cache = new Map(); // cache simples por URL
+
+    function setStatus(html){ statusEl.innerHTML = html || ''; }
+    function clearResults(){ saida.innerHTML = ''; }
+
+    function normalize(s){
+      return (s||'')
+        .normalize('NFD').replace(/\p{Diacritic}/gu,'')
+        .replace(/\s+/g,' ').trim();
+    }
+
+    async function fetchJSON(url){
+      if(cache.has(url)) return cache.get(url);
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      cache.set(url, data);
+      return data;
+    }
+
+    // Levenshtein distance
+    function levenshtein(a,b){
+      a = a.toLowerCase(); b = b.toLowerCase();
+      const m = a.length, n = b.length;
+      const dp = Array.from({length:m+1},()=>Array(n+1).fill(0));
+      for(let i=0;i<=m;i++) dp[i][0]=i;
+      for(let j=0;j<=n;j++) dp[0][j]=j;
+      for(let i=1;i<=m;i++){
+        for(let j=1;j<=n;j++){
+          const cost = a[i-1]===b[j-1]?0:1;
+          dp[i][j] = Math.min(
+            dp[i-1][j]+1,
+            dp[i][j-1]+1,
+            dp[i-1][j-1]+cost
+          );
+        }
+      }
+      return dp[m][n];
+    }
+
+    function similarityPct(a,b){
+      if(!a || !b) return 0;
+      const maxLen = Math.max(a.length, b.length) || 1;
+      const dist = levenshtein(a,b);
+      const ratio = 1 - (dist / maxLen);
+      return ratio * 100; // 0..100
+    }
+
+    async function viaCepBuscar(uf, cidade, logradouro){
+      const url = `https://viacep.com.br/ws/${encodeURIComponent(uf)}/${encodeURIComponent(cidade)}/${encodeURIComponent(logradouro)}/json/`;
+      try{
+        const data = await fetchJSON(url);
+        if(Array.isArray(data)) return data;
+        return null;
+      }catch(e){
+        return null;
+      }
+    }
+
+    function makePrefixes(term){
+      const t = term.toLowerCase();
+      const prefixes = new Set();
+      const min = 2;
+      const max = Math.max(3, Math.floor(t.length/2));
+      for(let i=min;i<=max;i++){
+        prefixes.add(t.slice(0,i));
+      }
+      // também tenta o primeiro token (caso tenha espaços) e fatias de 3 letras dentro da palavra
+      const first = t.split(' ')[0];
+      if(first.length>=3) prefixes.add(first.slice(0,3));
+      for(let i=0;i<Math.max(0,t.length-2);i++){
+        const slice = t.slice(i, i+3);
+        if(slice.length===3) prefixes.add(slice);
+      }
+      return Array.from(prefixes).slice(0,15); // limita para evitar excesso de chamadas
+    }
+
+    async function coletarCandidatos(uf, cidade, entrada){
+      const prefixes = makePrefixes(entrada);
+      const set = new Set();
+      for(const p of prefixes){
+        const lote = await viaCepBuscar(uf, cidade, p);
+        if(Array.isArray(lote)){
+          for(const d of lote){
+            if(d && d.logradouro) set.add(d.logradouro);
+          }
+        }
+      }
+      return Array.from(set);
+    }
+
+    function renderExact(title, lista){
+      const wrap = document.createElement('div');
+      wrap.className = 'result-card';
+      const items = lista.map(d => `
+        <div class="subtitle">
+          <span class="title">${d.cep}</span>
+          <span class="badge">${d.logradouro || '—'}</span>
+          <div><small>${d.bairro || '—'} • ${d.localidade || ''}/${d.uf || ''}</small></div>
+        </div>
+      `).join('');
+      wrap.innerHTML = `<div class="title">${title}</div><div class="sep"></div>${items}`;
+      saida.appendChild(wrap);
+    }
+
+    function renderFuzzy(sugestoes){
+      const wrap = document.createElement('div');
+      wrap.className = 'result-card';
+      wrap.innerHTML = `<div class="title">Sugestões por semelhança</div><div class="sep"></div>`;
+      for(const s of sugestoes){
+        const pct = s.similaridade.toFixed(2); // 2 casas decimais
+        const header = document.createElement('div');
+        header.className = 'subtitle';
+        header.innerHTML = `<strong>${s.sugestao}</strong> <span class="badge">${pct}% de similaridade</span>`;
+        wrap.appendChild(header);
+        const bloco = document.createElement('div');
+        bloco.style.margin = '6px 0 10px';
+        bloco.innerHTML = s.enderecos.map(d=>`
+          <div><small>${d.cep} • ${d.logradouro || '—'} • ${d.bairro || '—'} • ${d.localidade}/${d.uf}</small></div>
+        `).join('');
+        wrap.appendChild(bloco);
+      }
+      saida.appendChild(wrap);
+    }
+
+    async function onBuscar(){
+      clearResults();
+      const uf = normalize($('#uf').value).toUpperCase();
+      const cidade = normalize($('#cidade').value);
+      const rua = normalize($('#rua').value);
+
+      if(!uf || !cidade || !rua){
+        setStatus('<span class="error">Preencha UF, cidade e rua.</span>');
+        return;
+      }
+
+      setStatus('<div class="loading"><div class="spinner"></div> Buscando no ViaCEP…</div>');
+      btnBuscar.disabled = true;
+
+      // 1) tentativa exata
+      const exatos = await viaCepBuscar(uf, cidade, rua);
+      if(exatos && exatos.length){
+        renderExact('Correspondências exatas', exatos);
+      }
+
+      // 2) fuzzy (sempre roda também para sugerir alternativas)
+      setStatus('<div class="loading"><div class="spinner"></div> Buscando semelhantes…</div>');
+      const candidatos = await coletarCandidatos(uf, cidade, rua);
+
+      const ranked = candidatos
+        .map(log => ({
+          logradouro: log,
+          score: similarityPct(rua.toLowerCase(), log.toLowerCase())
+        }))
+        .filter(x => x.score > 50) // limiar mínimo
+        .sort((a,b)=> b.score - a.score)
+        .slice(0,5);
+
+      const sugestoes = [];
+      for(const r of ranked){
+        const enderecos = await viaCepBuscar(uf, cidade, r.logradouro);
+        if(enderecos && enderecos.length){
+          sugestoes.push({ sugestao: r.logradouro, similaridade: r.score, enderecos });
+        }
+      }
+
+      if(sugestoes.length){
+        renderFuzzy(sugestoes);
+        setStatus('');
+      } else if(!exatos || !exatos.length){
+        setStatus('<span class="error">Nenhum resultado encontrado (exato ou semelhante).</span>');
+      } else {
+        setStatus('');
+      }
+
+      btnBuscar.disabled = false;
+    }
+
+    btnBuscar.addEventListener('click', onBuscar);
+    btnLimpar.addEventListener('click', () => {
+      $('#rua').value = '';
+      clearResults();
+      setStatus('');
+      $('#rua').focus();
+    });
+
+    // Enter para buscar
+    ['uf','cidade','rua'].forEach(id => {
+      document.getElementById(id).addEventListener('keydown', (e)=>{
+        if(e.key==='Enter') onBuscar();
+      });
+    });
+  </script>
+</body>
+</html>
+</p>
+</body>
+</html>

@@ -214,9 +214,10 @@
         wrap.appendChild(header);
         const bloco = document.createElement('div');
         bloco.style.margin = '6px 0 10px';
-        bloco.innerHTML = s.enderecos.map(d=>`
-          <div><small>${d.cep} • ${d.logradouro || '—'} • ${d.bairro || '—'} • ${d.localidade}/${d.uf}</small></div>
-        `).join('');
+        bloco.innerHTML = s.enderecos.map(d=>{
+        const faixa = d.complemento ? ` (${d.complemento})` : '';
+        return `<div><small>${d.cep} • ${d.logradouro || '—'}${faixa} • ${d.bairro || '—'} • ${d.localidade}/${d.uf}</small></div>`;
+        }).join('');
         wrap.appendChild(bloco);
       }
       saida.appendChild(wrap);

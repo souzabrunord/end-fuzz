@@ -1,0 +1,97 @@
+import requests
+from rapidfuzz import fuzz, process
+
+# ---------------- FUNÇÕES ----------------
+
+def buscar_cep(uf, cidade, rua):
+    """Busca exata no ViaCEP pelo logradouro"""
+    url = f"https://viacep.com.br/ws/{uf}/{cidade}/{rua}/json/"
+    response = requests.get(url)
+    if response.status_code != 200:
+        return None
+    data = response.json()
+    if isinstance(data, dict) and data.get("erro"):
+        return None
+    return data
+
+def coletar_logradouros(uf, cidade, rua_digitada):
+    """
+    Coleta logradouros usando prefixos da entrada do usuário
+    para aumentar chance de encontrar ruas com erro de digitação.
+    """
+    rua_digitada = rua_digitada.lower()
+    logradouros = set()
+    max_len = max(3, len(rua_digitada)//2)
+    prefixos = {rua_digitada[:i] for i in range(2, max_len+1)}
+
+    # Gera slices de 3 letras dentro da palavra
+    for i in range(len(rua_digitada)-2):
+        prefixos.add(rua_digitada[i:i+3])
+
+    for prefixo in prefixos:
+        url = f"https://viacep.com.br/ws/{uf}/{cidade}/{prefixo}/json/"
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    for d in data:
+                        if "logradouro" in d and d["logradouro"]:
+                            logradouros.add(d["logradouro"])
+        except:
+            continue
+    return list(logradouros)
+
+def buscar_com_fuzzy(uf, cidade, rua_digitada, limite=5):
+    logradouros = coletar_logradouros(uf, cidade, rua_digitada)
+    if not logradouros:
+        return []
+
+    # Aplica fuzzy matching
+    melhores = process.extract(rua_digitada, logradouros, scorer=fuzz.WRatio, limit=limite)
+
+    resultados = []
+    for sugestao, score, _ in melhores:
+        cep_data = buscar_cep(uf, cidade, sugestao)
+        if cep_data:
+            resultados.append({
+                "sugestao": sugestao,
+                "similaridade": score,
+                "enderecos": cep_data
+            })
+    return resultados
+
+def formatar_enderecos(enderecos):
+    """
+    Formata cada CEP com logradouro, bairro e faixa de numeração se houver.
+    """
+    linhas = []
+    for e in enderecos:
+        numero = e.get('complemento', '').strip()
+        faixa = f" ({numero})" if numero else ""
+        linhas.append(f" - {e['cep']} | {e['logradouro']}{faixa} - {e['bairro']}")
+    return linhas
+
+# ---------------- PROGRAMA ----------------
+
+uf = input("Digite a UF (ex: SP): ").strip()
+cidade = input("Digite a cidade (ex: Sao Paulo): ").strip()
+rua_digitada = input("Digite o nome da rua: ").strip()
+
+# 1ª tentativa: busca exata
+resultados = buscar_cep(uf, cidade, rua_digitada)
+
+if resultados:
+    print("\n✅ Resultados exatos encontrados:")
+    for linha in formatar_enderecos(resultados):
+        print(linha)
+else:
+    print("\n⚠️ Nenhum resultado exato. Buscando por semelhança...\n")
+    sugestoes = buscar_com_fuzzy(uf, cidade, rua_digitada)
+    if sugestoes:
+        for s in sugestoes:
+            print(f"Sugestão: {s['sugestao']} (similaridade: {s['similaridade']:.2f}%)")
+            for linha in formatar_enderecos(s["enderecos"]):
+                print(linha)
+    else:
+        print("❌ Nenhuma rua semelhante encontrada.")
